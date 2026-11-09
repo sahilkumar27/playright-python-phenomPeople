@@ -86,3 +86,7 @@ class TestPhenomLogin:
         print("Phenom CRM login successful")
 
         print("Current URL:", login_page.get_current_url())
+
+
+        # Save authenticated session
+        save_auth_state()

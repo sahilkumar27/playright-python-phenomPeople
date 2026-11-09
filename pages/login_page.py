@@ -93,4 +93,6 @@ class LoginPage(BasePage):
         self.enter_username(username)
 
         self.enter_password(password)
+        self.page.wait_for_timeout(7000)
+
 
