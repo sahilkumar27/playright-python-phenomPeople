@@ -10,7 +10,14 @@ from playwright.sync_api import expect
 @pytest.mark.e2e
 class TestDashboard:
 
-    def test_search_candidate(self, login_page, dashboard_page):
+    @pytest.mark.parametrize(
+        "should_reschedule", [False, True], ids=["scheduled", "rescheduled"]
+    )
+    def test_search_candidate(
+        self, login_page, dashboard_page, should_reschedule
+    ):
+        candidate_name = "Pavan Chittala"
+        job_title = "Hiring status automation run job"
 
         # Step 1: Open Phenom and Login
         login_page.open(ConfigReader.BASE_URL)
@@ -31,7 +38,7 @@ class TestDashboard:
         print("Successfully navigated to Dashboard")
 
         # Step 3: Search Candidate
-        dashboard_page.search_candidate("Pavan Chittala")
+        dashboard_page.search_candidate(candidate_name)
 
         print("Searching for Pavan Chittala")
 
@@ -113,16 +120,30 @@ class TestDashboard:
         #Step 19: Navigate back to the dashboard and verify that the interview invite is visible in the upcoming interviews section
 
         interview_page.navigate_to_dashboard()
-        login_page.page.bring_to_front()
-        dashboard_url = login_page.page.url.split("/dashboard", 1)[0] + "/dashboard"
-        login_page.page.goto(dashboard_url, wait_until="domcontentloaded")
+        candidate_profile_tab.bring_to_front()
+        dashboard_page = DashboardPage(candidate_profile_tab)
+        dashboard_url = (
+            candidate_profile_tab.url.split("/dashboard", 1)[0]
+            + "/dashboard/recruiter-dashboard"
+        )
+        candidate_profile_tab.goto(
+            dashboard_url, wait_until="domcontentloaded"
+        )
 
+        dashboard_page.wait_for_meeting_tabs()
         dashboard_page.scroll_down(600)
-        dashboard_page.click_first_meeting()
+        dashboard_page.click_my_pending_tab()
+        expect(dashboard_page.meeting_row(meeting_title)).to_be_visible(
+            timeout=30000
+        )
+        dashboard_page.open_meeting_by_title(meeting_title)
 
 
         dashboard_page.click_my_meetings_activity()
         dashboard_page.click_preview_conversion()
+        dashboard_page.verify_email_subject(
+            f"Interview availability - {candidate_name} - {job_title}"
+        )
 
         # Step 22: Scroll inside Preview Conversation
         dashboard_page.scroll_preview_conversation(500)
@@ -130,11 +151,68 @@ class TestDashboard:
         # Step 23: Click scheduling link and capture new tab
         scheduling_page = dashboard_page.click_meeting_link()
         scheduling_dashboard = DashboardPage(scheduling_page)
-        scheduling_dashboard.open_pending_scheduling()
-        scheduling_dashboard.select_date_and_time()
-        scheduling_dashboard.click_schedule()
-        scheduling_dashboard.return_to_parent_tab(login_page.page)
-        login_page.page.reload(wait_until="domcontentloaded")
+        scheduling_dashboard.open_pending_scheduling(meeting_title)
+        scheduled_slot = scheduling_dashboard.select_date_and_time()
+        scheduled_slot = scheduling_dashboard.click_schedule(scheduled_slot)
+
+        verified_slot = scheduled_slot
+        if should_reschedule:
+            verified_slot = (
+                scheduling_dashboard.reschedule_scheduled_meeting(
+                    scheduled_slot
+                )
+            )
+            assert verified_slot != scheduled_slot, (
+                "Rescheduling must select a different time slot"
+            )
+            verified_slot = scheduling_dashboard.click_schedule(
+                verified_slot, verify_slot=False
+            )
+
+        scheduling_dashboard.return_to_parent_tab(candidate_profile_tab)
+        candidate_profile_tab.goto(
+            dashboard_url, wait_until="domcontentloaded"
+        )
+        dashboard_page.wait_for_meeting_tabs()
         dashboard_page.scroll_down(600)
 
         print("Dashboard interview scheduling flow completed")
+
+        # Verify the scheduled meeting and its slot under My Upcoming.
+        dashboard_page.click_my_upcoming_tab()
+        dashboard_page.open_all_meeting_activities(meeting_title)
+        dashboard_page.verify_meeting_in_upcoming(
+            meeting_title, verified_slot
+        )
+        dashboard_page.open_meeting_activity(meeting_title)
+        dashboard_page.verify_confirmation_email(candidate_name, job_title)
+
+        # Reload the full activity table to dismiss the conversation panel.
+        candidate_profile_tab.reload(wait_until="domcontentloaded")
+        dashboard_page = DashboardPage(candidate_profile_tab)
+        dashboard_page.open_all_meeting_activities(meeting_title)
+
+        # Step 24: Cancel the scheduled meeting
+        dashboard_page.click_three_dot(meeting_title)
+        dashboard_page.click_cancel_meeting()
+        dashboard_page.select_cancel_reason()
+        dashboard_page.click_yes_cancel_meeting()
+
+        # Step 25: Refresh dashboard
+        candidate_profile_tab.reload(wait_until="domcontentloaded")
+
+        # Reload the all-activity view and find this meeting's status.
+        dashboard_page.open_all_meeting_activities(
+            meeting_title, status="all"
+        )
+
+        # Step 26: Verify meeting cancellation status [Status Update ASSERTION]
+        cancelled_status = dashboard_page.get_meeting_status(
+            meeting_title
+        )
+
+        expect(cancelled_status).to_be_visible()
+
+        print(
+            f"PASS: Meeting '{meeting_title}' status is Cancelled"
+        )

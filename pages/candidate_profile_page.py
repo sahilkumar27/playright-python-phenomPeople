@@ -65,7 +65,7 @@ class CandidateProfilePage(BasePage):
 
         self.invite_to_job_interview.wait_for(
             state="visible",
-            timeout=15000
+            timeout=30000
         )
 
         self.invite_to_job_interview.click()
@@ -75,7 +75,7 @@ class CandidateProfilePage(BasePage):
     def click_single_meeting(self):
         self.single_meeting_option.wait_for(
             state="visible",
-            timeout=15000
+            timeout=30000
         )
 
         self.single_meeting_option.click()

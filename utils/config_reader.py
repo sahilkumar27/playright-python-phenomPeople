@@ -2,24 +2,6 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# USERNAME = (
-#     os.getenv("BASE_URL")
-#     or os.getenv("BASE_URL")
-#     or os.getenv("standard_user")
-#     or "standard_user"
-# )
-# PASSWORD = (
-#     os.getenv("SAUCE_PASSWORD")
-#     or os.getenv("SAUCEDEMO_PASSWORD")
-#     or os.getenv("secret_sauce")
-#     or "secret_sauce"
-# )
-#
-
-
-
 # Project root directory
 ROOT_DIR = Path(__file__).resolve().parent.parent
 

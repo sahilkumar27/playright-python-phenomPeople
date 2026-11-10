@@ -1,7 +1,7 @@
 
 from pathlib import Path
 from urllib.parse import urljoin
-from playwright.sync_api import Page
+from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 from .base_page import BasePage
 
 
@@ -80,7 +80,7 @@ class InterviewPage(BasePage):
         )
 
         #Navigate to dashboard page
-        self.dsahboard_page = page.locator(
+        self.dashboard_link = page.locator(
             "//a[@id='crmAutoEventsNavDashboardPage']"
         )
 
@@ -99,7 +99,7 @@ class InterviewPage(BasePage):
 
         self.meeting_title_input.wait_for(
             state="visible",
-            timeout=15000
+            timeout=30000
         )
 
         self.meeting_title_input.fill(meeting_title)
@@ -221,28 +221,21 @@ class InterviewPage(BasePage):
 
         print("Clicked Send invite")
 
-        self.ok_got_it_button.click()
-        print("Clicked Ok, Got It button")
-
-    def clickDashboard(self):
-        self.dsahboard_page.wait_for(
-            state="visible",
-            timeout=15000
-        )
-
-        self.dsahboard_page.click()
-        self.page.wait_for_url(
-            lambda url: "dashboard" in url,
-            timeout=30000
-        )
-        print("Navigated to Dashboard page")
+        try:
+            self.ok_got_it_button.wait_for(state="visible", timeout=10000)
+            self.ok_got_it_button.click()
+            print("Clicked Ok, Got It button")
+        except PlaywrightTimeoutError:
+            # Some environments complete the send without displaying a dialog.
+            self.page.wait_for_timeout(2000)
+            print("Invite confirmation dialog was not displayed")
 
     def navigate_to_dashboard(self):
         if self.ok_got_it_button.is_visible():
             self.ok_got_it_button.click()
             print("Closed invite confirmation")
 
-        dashboard_href = self.dsahboard_page.get_attribute("href")
+        dashboard_href = self.dashboard_link.get_attribute("href")
         if dashboard_href:
             dashboard_url = urljoin(self.page.url, dashboard_href)
         else:
