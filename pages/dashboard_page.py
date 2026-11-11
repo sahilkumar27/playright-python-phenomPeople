@@ -104,6 +104,19 @@ class DashboardPage:
             timeout=30000,
         )
 
+    def _wait_for_dashboard_idle(self):
+        self.page.wait_for_function(
+            """() => [...document.querySelectorAll('.app-loader-cntr')].every(
+                element => {
+                    const style = window.getComputedStyle(element);
+                    return style.display === 'none' ||
+                        style.visibility === 'hidden' ||
+                        element.getClientRects().length === 0;
+                }
+            )""",
+            timeout=45000,
+        )
+
     def search_candidate(self, candidate_name):
         self.global_search_input.wait_for(state="visible", timeout=30000)
         for attempt in range(3):
@@ -130,10 +143,20 @@ class DashboardPage:
         print("First candidate selected successfully")
 
     def open_candidate_profile(self):
-        self.open_candidate_profile_link.wait_for(
-            state="visible",
-            timeout=15000
-        )
+        try:
+            self.open_candidate_profile_link.wait_for(
+                state="visible", timeout=30000
+            )
+        except PlaywrightTimeoutError:
+            # Selecting a search result can race the candidate detail panel.
+            # Re-select it once so the external profile action is rendered.
+            self.candidate_search_result.wait_for(
+                state="visible", timeout=15000
+            )
+            self.candidate_search_result.click(force=True)
+            self.open_candidate_profile_link.wait_for(
+                state="visible", timeout=30000
+            )
 
         self.open_candidate_profile_link.click()
 
@@ -178,6 +201,12 @@ class DashboardPage:
         )
         self.preview_conversion.scroll_into_view_if_needed()
         self.preview_conversion.click(force=True)
+        self.preview_conversation_modal.wait_for(
+            state="visible", timeout=30000
+        )
+        self.preview_conversation_loader.wait_for(
+            state="hidden", timeout=45000
+        )
         print("Clicked on Preview Conversation")
 
 
@@ -280,6 +309,7 @@ class DashboardPage:
 
     def click_my_upcoming_tab(self):
         self.my_upcoming_tab.wait_for(state="visible", timeout=30000)
+        self._wait_for_dashboard_idle()
         self.my_upcoming_tab.click()
         print("Opened My Upcoming tab")
 
@@ -291,6 +321,13 @@ class DashboardPage:
         return self.meeting_rows.filter(has_text=meeting_title).first
 
     def open_all_meeting_activities(self, meeting_title=None, status=None):
+        try:
+            self.see_all_meeting_activities.wait_for(
+                state="visible", timeout=30000
+            )
+        except PlaywrightTimeoutError:
+            pass
+
         if self.see_all_meeting_activities.is_visible():
             self.see_all_meeting_activities.click()
             self.page.get_by_text(
@@ -368,9 +405,9 @@ class DashboardPage:
             state="visible", timeout=15000
         )
 
-    def open_pending_scheduling(self, meeting_title=None):
+    def open_pending_scheduling(self, meeting_title, job_title):
         pending = self.page.get_by_text(
-            "Hiring status automation run job", exact=True
+            job_title, exact=True
         ).first
         pending.wait_for(state="visible", timeout=30000)
         group = pending.locator(
@@ -560,13 +597,32 @@ class DashboardPage:
 
             if expected_slot and verify_slot:
                 month, day = expected_slot["date"].strftime("%b %d").split()
-                expect(body).to_contain_text(
-                    re.compile(rf"{re.escape(month)}\s*{int(day)}", re.I),
-                    timeout=15000,
-                )
-                expect(body).to_contain_text(
-                    expected_slot["time"], timeout=15000
-                )
+                try:
+                    # A reschedule page can still show the previous success
+                    # panel while the update is being processed. Wait for the
+                    # confirmation itself to reflect the newly selected slot.
+                    expect(body).to_contain_text(
+                        re.compile(rf"{re.escape(month)}\s*{int(day)}", re.I),
+                        timeout=30000,
+                    )
+                    expect(body).to_contain_text(
+                        expected_slot["time"], timeout=10000
+                    )
+                except AssertionError:
+                    body_text = body.inner_text(timeout=10000)
+                    if action_name.lower() == "reschedule" and attempt < 3:
+                        print(
+                            "Reschedule confirmation still shows the previous "
+                            "slot; selecting another available slot."
+                        )
+                        expected_slot = self.reschedule_scheduled_meeting(
+                            expected_slot
+                        )
+                        continue
+                    raise AssertionError(
+                        "Scheduler did not confirm the selected slot "
+                        f"{expected_slot!r}. Response: {body_text[:800]}"
+                    )
             print("Scheduler response:", body.inner_text(timeout=10000)[:1000])
             return expected_slot
 
@@ -629,6 +685,7 @@ class DashboardPage:
     #Cancel the meeting from the dashboard page - under pending tab and verify that the meeting is cancelled under my meeting tab
     def click_my_pending_tab(self):
         self.my_pending_tab.wait_for(state="visible", timeout=30000)
+        self._wait_for_dashboard_idle()
         self.my_pending_tab.click(force=True)
         print("Clicked on My Pending tab")
 

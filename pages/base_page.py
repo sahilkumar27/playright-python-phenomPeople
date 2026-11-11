@@ -1,4 +1,4 @@
-from playwright.sync_api import Locator, Page
+from playwright.sync_api import Error as PlaywrightError, Locator, Page
 
 from utils.wait_utils import WaitUtils
 
@@ -17,7 +17,26 @@ class BasePage:
     # ================= NAVIGATION =================
 
     def navigate(self, url: str):
-        self.page.goto(url, wait_until="domcontentloaded")
+        for attempt in range(3):
+            try:
+                self.page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=45000,
+                )
+                return
+            except PlaywrightError as error:
+                if (
+                    "ERR_NAME_NOT_RESOLVED" not in str(error)
+                    or attempt == 2
+                ):
+                    raise
+                delay_ms = 1000 * (attempt + 1)
+                print(
+                    "CRM hostname lookup failed; retrying navigation "
+                    f"in {delay_ms} ms (attempt {attempt + 2}/3)"
+                )
+                self.page.wait_for_timeout(delay_ms)
 
     def get_current_url(self):
         return self.page.url

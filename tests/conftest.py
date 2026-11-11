@@ -1,8 +1,10 @@
 
 import sys
 import json
+from datetime import datetime
 from pathlib import Path
 
+import allure
 import pytest
 from playwright.sync_api import sync_playwright
 
@@ -19,6 +21,70 @@ from pages.dashboard_page import DashboardPage
 
 # Authentication state file
 AUTH_FILE = ROOT_DIR / "auth" / "auth_state.json"
+
+
+def _local_timestamp():
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def pytest_configure(config):
+    """Capture one local timestamp and report environment for this run."""
+    config._allure_run_started_at = _local_timestamp()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Write run metadata displayed in the Allure Environment section."""
+    report_dir = session.config.getoption("--alluredir", default=None)
+    if not report_dir:
+        return
+
+    destination = Path(report_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "environment.properties").write_text(
+        "Application=Phenom CRM UAT\n"
+        "Test Suite=Interview Scheduling\n"
+        f"Run Started At={session.config._allure_run_started_at}\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Attach browser screenshots and URLs to failed Allure test results."""
+    outcome = yield
+    report = outcome.get_result()
+    if report.when != "call" or not report.failed:
+        return
+
+    context = item.funcargs.get("browser_context")
+    if context is None:
+        page = item.funcargs.get("page")
+        contexts = [page.context] if page and not page.is_closed() else []
+    else:
+        contexts = [context]
+
+    for context_index, browser_context in enumerate(contexts, start=1):
+        for page_index, page in enumerate(browser_context.pages, start=1):
+            if page.is_closed():
+                continue
+            prefix = f"Context {context_index} - Page {page_index}"
+            allure.attach(
+                page.url,
+                name=f"{prefix} URL",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+            try:
+                allure.attach(
+                    page.screenshot(full_page=True),
+                    name=f"{prefix} failure screenshot",
+                    attachment_type=allure.attachment_type.PNG,
+                )
+            except Exception as error:
+                allure.attach(
+                    f"Could not capture failure screenshot: {error}",
+                    name=f"{prefix} screenshot capture error",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
 
 
 # Initialize Playwright

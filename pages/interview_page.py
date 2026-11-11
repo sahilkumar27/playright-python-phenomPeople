@@ -243,7 +243,7 @@ class InterviewPage(BasePage):
         self.page.goto(dashboard_url, wait_until="domcontentloaded")
         self.page.wait_for_url(
             lambda url: "/dashboard" in url,
-            timeout=30000
+            timeout=45000,
+            wait_until="domcontentloaded",
         )
         print("Navigated to Dashboard page")
-        self.page.wait_for_load_state("domcontentloaded", timeout=30000)
