@@ -9,6 +9,7 @@ from utils.config_reader import ConfigReader
 @pytest.fixture(scope="session")
 def browser_type_launch_args():
     return {
+        "channel": ConfigReader.BROWSER,
         "headless": ConfigReader.HEADLESS,
         "slow_mo": ConfigReader.SLOW_MO,
         "args": ["--start-maximized"],

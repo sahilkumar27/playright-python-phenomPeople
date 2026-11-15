@@ -16,7 +16,7 @@ class ConfigReader:
         "https://uat-pipeline.phenompeople.com",
     )
 
-    BROWSER = os.getenv("BROWSER", "chromium")
+    BROWSER = os.getenv("BROWSER", "chrome")
 
     HEADLESS = os.getenv(
         "HEADLESS", "false"
