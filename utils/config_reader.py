@@ -1,0 +1,33 @@
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Project root directory
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables
+load_dotenv(ROOT_DIR / ".env")
+
+
+class ConfigReader:
+
+    BASE_URL = os.getenv(
+        "BASE_URL",
+        "https://uat-pipeline.phenompeople.com",
+    )
+
+    BROWSER = os.getenv("BROWSER", "chromium")
+
+    HEADLESS = os.getenv(
+        "HEADLESS", "false"
+    ).lower() == "true"
+
+    SLOW_MO = int(os.getenv("SLOW_MO", "300"))
+
+    DEFAULT_TIMEOUT = int(
+        os.getenv("DEFAULT_TIMEOUT", "15000")
+    )
+
+    USERNAME = os.getenv("PHENOM_USERNAME")
+
+    PASSWORD = os.getenv("PHENOM_PASSWORD")
